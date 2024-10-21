@@ -11,7 +11,7 @@ public record OrderPublicDTO(Long id,
                              LocalDateTime created,
                              LocalDateTime completed,
                              Double price,
-                             List<CoffeeNoRefDTO> coffeeIdList)
+                             List<CoffeeNoRefDTO> coffees)
         implements IOrderPublicDTO {
 
     public OrderPublicDTO(Order order) {
