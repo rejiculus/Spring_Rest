@@ -5,6 +5,7 @@ import com.example.rest.entity.exception.NoValidIdException;
 import com.example.rest.entity.exception.NoValidNameException;
 import com.example.rest.entity.exception.NoValidPriceException;
 import com.example.rest.entity.exception.NullParamException;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,11 +15,40 @@ import java.util.Objects;
  * Coffee entity. Contains id, name, price and order list fields.
  * Name and price required. Default values: id=-1, orderList= empty list.
  */
+@Entity(name = "Coffee")
+@Table(name = "coffee")
 public class Coffee {
+    @Id
+    @SequenceGenerator(
+            name = "coffee_sequence",
+            sequenceName = "coffee_sequence",
+            allocationSize = 10
+    )
+    @GeneratedValue(
+            strategy = GenerationType.SEQUENCE,
+            generator = "coffee_sequence"
+    )
+    @Column(
+            name = "id",
+            nullable = false,
+            updatable = false
+    )
     private Long id;
+
+    @Column(name = "name", nullable = false)
     private String name;
+
+    @Column(name = "price", nullable = false)
     private Double price;
-    private List<Order> orderList;
+
+    @ManyToMany(mappedBy = "coffeeList", fetch = FetchType.LAZY)
+    private List<Order> orderList = new ArrayList<>();
+
+    /**
+     * Empty constructor.
+     */
+    public Coffee() {
+    }
 
     /**
      * All params coffee constructor
@@ -46,53 +76,6 @@ public class Coffee {
         this.name = name;
         this.price = price;
         this.orderList = new ArrayList<>(orderList);
-    }
-
-    /**
-     * Coffee constructor without id.
-     *
-     * @param name      name of the coffee. Can't be null or empty.
-     * @param price     coffee price. Must be more than zero. Can't be NaN, Infinity or null.
-     * @param orderList list of orders that contains this coffee. Can't be null.
-     * @throws NullParamException    thrown when one of param equals null.
-     * @throws NoValidNameException  thrown when name is empty.
-     * @throws NoValidPriceException thrown when price is NaN, Infinite or less than zero.
-     */
-    public Coffee(String name, Double price, List<Order> orderList) {
-        if (name == null || price == null || orderList == null)
-            throw new NullParamException();
-        if (name.isEmpty())
-            throw new NoValidNameException();
-        if (price.isNaN() || price.isInfinite() || price < 0.0)
-            throw new NoValidPriceException(price);
-
-        this.id = -1L;
-        this.name = name;
-        this.price = price;
-        this.orderList = new ArrayList<>(orderList);
-    }
-
-    /**
-     * Constructor of necessary params. Set default value: id=-1, orderList=empty list.
-     *
-     * @param name  name of the coffee. Can't be null or empty.
-     * @param price coffee price. Must be more than zero. Can't be NaN, Infinity or null.
-     * @throws NullParamException    thrown when one of param equals null.
-     * @throws NoValidNameException  thrown when name is empty.
-     * @throws NoValidPriceException thrown when price is NaN, Infinite or less than zero.
-     */
-    public Coffee(String name, Double price) {
-        if (name == null || price == null)
-            throw new NullParamException();
-        if (name.isEmpty())
-            throw new NoValidNameException();
-        if (price.isNaN() || price.isInfinite() || price < 0.0)
-            throw new NoValidPriceException(price);
-
-        this.id = -1L;
-        this.name = name;
-        this.price = price;
-        this.orderList = new ArrayList<>();
     }
 
     /**

@@ -2,6 +2,11 @@ package com.example.rest.entity;
 
 
 import com.example.rest.entity.exception.*;
+import com.example.rest.servlet.adapter.LocalDateTimeDeserializer;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import jakarta.persistence.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -15,13 +20,48 @@ import java.util.Objects;
  * Required fields: barista, coffeeList.
  * Default values: id = -1, price = 0, created = null, completed = null.
  */
+@Entity(name = "Order")
+@Table(name = "\"order\"")
 public class Order {
+    @Id
+    @SequenceGenerator(
+            name = "order_sequence",
+            sequenceName = "order_sequence",
+            allocationSize = 10
+    )
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "order_sequence")
     private Long id;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "barista", nullable = false)
     private Barista barista;
-    private List<Coffee> coffeeList;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "order_coffee",
+            joinColumns = {@JoinColumn(name = "order_id")},
+            inverseJoinColumns = {@JoinColumn(name = "coffee_id")}
+    )
+    private List<Coffee> coffeeList = new ArrayList<>();
+
+    @Column(name = "created", nullable = false)
+    @JsonDeserialize(using = LocalDateTimeDeserializer.class)
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime created;
+
+    @Column(name = "completed")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime completed;
+
+    @Column(name = "price", nullable = false)
     private Double price;
+
+    /**
+     * Empty constructor.
+     */
+    public Order() {
+    }
 
     /**
      * All fields constructor.
@@ -56,73 +96,6 @@ public class Order {
         this.created = created;
         this.completed = completed;
         this.price = price;
-    }
-
-    /**
-     * Without id constructor.
-     *
-     * @param barista    who prepared this order. Can't be null.
-     * @param coffeeList list of ordered coffee. Can't be null.
-     * @param created    datetime when order is ordered.
-     * @param completed  datetime when order is complete. Can't be before created.
-     * @param price      price for order (sum of coffee's prices * barista's tip size). Can't be NaN, Infinity, null or less than zero
-     * @throws NullParamException              thrown when one of param equals null.
-     * @throws CreatedNotDefinedException      thrown when completed is defined but created is not.
-     * @throws CompletedBeforeCreatedException thrown when completed is before created.
-     * @throws NoValidPriceException           thrown when price is NaN, Infinite or less than zero.
-     */
-    public Order(Barista barista, List<Coffee> coffeeList, LocalDateTime created, LocalDateTime completed, Double price) {
-        if (barista == null || coffeeList == null || price == null)
-            throw new NullParamException();
-        if (created == null && completed != null)
-            throw new CreatedNotDefinedException();
-        if (completed != null && completed.isBefore(created))
-            throw new CompletedBeforeCreatedException(created, completed);
-        if (price.isNaN() || price.isInfinite() || price < 0.0)
-            throw new NoValidPriceException(price);
-
-        this.id = -1L;
-        this.barista = barista;
-        this.coffeeList = new ArrayList<>(coffeeList);
-        this.created = created;
-        this.completed = completed;
-        this.price = price;
-    }
-
-    /**
-     * Minimum required constructor.
-     *
-     * @param barista    who prepared this order. Can't be null.
-     * @param coffeeList list of ordered coffee. Can't be null.
-     * @throws NullParamException thrown when one of param equals null.
-     */
-    public Order(Barista barista, List<Coffee> coffeeList) {
-        if (barista == null || coffeeList == null)
-            throw new NullParamException();
-
-        this.id = -1L;
-        this.barista = barista;
-        this.coffeeList = new ArrayList<>(coffeeList);
-        this.price = 0.0;
-    }
-
-    /**
-     * Minimum required constructor with created param.
-     *
-     * @param barista    who prepared this order. Can't be null.
-     * @param created    datetime when order is ordered.
-     * @param coffeeList list of ordered coffee. Can't be null.
-     * @throws NullParamException thrown when one of param equals null.
-     */
-    public Order(Barista barista, List<Coffee> coffeeList, LocalDateTime created) {
-        if (barista == null || coffeeList == null || created == null)
-            throw new NullParamException();
-
-        this.id = -1L;
-        this.barista = barista;
-        this.coffeeList = new ArrayList<>(coffeeList);
-        this.created = created;
-        this.price = 0.0;
     }
 
     /**
@@ -237,11 +210,9 @@ public class Order {
      * @throws CompletedBeforeCreatedException thrown when completed is before created.
      */
     public void setCompleted(LocalDateTime completed) {
-        if (completed == null)
-            throw new NullParamException();
-        if (this.created == null)
+        if (this.created == null && completed != null)
             throw new CreatedNotDefinedException();
-        if (!completed.isAfter(this.created))
+        if (completed != null && !completed.isAfter(this.created))
             throw new CompletedBeforeCreatedException(this.created, completed);
 
         this.completed = completed;
