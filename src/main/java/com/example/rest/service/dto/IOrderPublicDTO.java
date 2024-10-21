@@ -14,6 +14,6 @@ public interface IOrderPublicDTO {
 
     Double price();
 
-    List<? extends ICoffeeNoRefDTO> coffeeIdList();
+    List<? extends ICoffeeNoRefDTO> coffees();
 
 }

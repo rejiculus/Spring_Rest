@@ -3,37 +3,41 @@ package com.example.rest.service.imp;
 import com.example.rest.entity.Coffee;
 import com.example.rest.entity.Order;
 import com.example.rest.entity.exception.*;
-import com.example.rest.repository.BaristaRepository;
-import com.example.rest.repository.CoffeeRepository;
 import com.example.rest.repository.OrderRepository;
-import com.example.rest.repository.exception.KeyNotPresentException;
 import com.example.rest.repository.exception.NoValidLimitException;
 import com.example.rest.repository.exception.NoValidPageException;
 import com.example.rest.service.IOrderService;
 import com.example.rest.service.dto.IOrderCreateDTO;
+import com.example.rest.service.dto.IOrderPublicDTO;
 import com.example.rest.service.dto.IOrderUpdateDTO;
 import com.example.rest.service.exception.OrderAlreadyCompletedException;
-import com.example.rest.service.exception.OrderHasReferencesException;
-import com.example.rest.service.mapper.OrderDtoToOrderMapper;
+import com.example.rest.service.mapper.OrderMapper;
+import com.example.rest.servlet.dto.OrderPublicDTO;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+@Service
+@Validated
 public class OrderService implements IOrderService {
     private final OrderRepository orderRepository;
-    private final CoffeeRepository coffeeRepository;
-    private final OrderDtoToOrderMapper mapper;
+    private final OrderMapper mapper;
 
-
-    public OrderService(BaristaRepository baristaRepository, CoffeeRepository coffeeRepository, OrderRepository orderRepository) {
-        if (baristaRepository == null || orderRepository == null || coffeeRepository == null)
+    @Autowired
+    public OrderService(OrderRepository orderRepository, OrderMapper mapper) {
+        if (orderRepository == null || mapper == null)
             throw new NullParamException();
-
         this.orderRepository = orderRepository;
-        this.coffeeRepository = coffeeRepository;
-        this.mapper = new OrderDtoToOrderMapper(baristaRepository, coffeeRepository);
+        this.mapper = mapper;
     }
 
     /**
@@ -41,15 +45,15 @@ public class OrderService implements IOrderService {
      *
      * @param orderDTO object with IOrderCreateDTO type.
      * @return Order object.
-     * @throws NullParamException     when coffeeDTO is null or it's fields is null.
-     * @throws KeyNotPresentException from addReference, when some coffee in coffeeList is not found.
+     * @throws NullParamException when coffeeDTO is null or it's fields is null.
      */
     @Override
-    public Order create(IOrderCreateDTO orderDTO) {
+    @Transactional
+    public IOrderPublicDTO create(@Valid IOrderCreateDTO orderDTO) {
         if (orderDTO == null)
             throw new NullParamException();
 
-        Order order = mapper.map(orderDTO);
+        Order order = mapper.createDtoToEntity(orderDTO);
 
         Double price = order.getCoffeeList().stream()
                 .map(Coffee::getPrice)
@@ -58,13 +62,8 @@ public class OrderService implements IOrderService {
         order.setPrice(price * (1.0 + order.getBarista().getTipSize()));
         order.setCreated(LocalDateTime.now());
 
-
-        order = this.orderRepository.create(order);
-        List<Coffee> actualCoffeeList = order.getCoffeeList();
-        for (Coffee coffee : actualCoffeeList) {
-            orderRepository.addReference(order.getId(), coffee.getId());
-        }
-        return order;
+        order = this.orderRepository.save(order);
+        return mapper.entityToDto(order);
     }
 
     /**
@@ -77,48 +76,34 @@ public class OrderService implements IOrderService {
      * @throws CreatedNotDefinedException      from mapper, when completed field is specified but created field is not.
      * @throws CompletedBeforeCreatedException from mapper, when completed time is before created time.
      * @throws NoValidTipSizeException         from mapper, when coffeeDTO's price is NaN, Infinite or less than zero.
-     * @throws KeyNotPresentException          from addReference, when some coffee in coffeeList is not found.
      */
     @Override
-    public Order update(IOrderUpdateDTO orderDTO) {
+    @Transactional
+    public IOrderPublicDTO update(@Valid IOrderUpdateDTO orderDTO) {
         if (orderDTO == null)
             throw new NullParamException();
 
-        Order order = mapper.map(orderDTO);
+        Order order = orderRepository.findById(orderDTO.id())
+                .orElseThrow(() -> new OrderNotFoundException(orderDTO.id()));
+
+        order = mapper.updateDtoToEntity(orderDTO);
 
         Double price = order.getCoffeeList().stream()
                 .map(Coffee::getPrice)
                 .reduce(0.0, Double::sum, Double::sum);
         order.setPrice(price * (1.0 + order.getBarista().getTipSize()));
 
-        order = this.orderRepository.update(order);
-
-        //update order - coffee references
-        List<Coffee> expectedCoffeeList = coffeeRepository.findByOrderId(order.getId());
-        List<Coffee> actualCoffeeList = order.getCoffeeList();
-        List<Coffee> deletedCoffees = new ArrayList<>(expectedCoffeeList);
-        List<Coffee> addedCoffees = new ArrayList<>(actualCoffeeList);
-        deletedCoffees.removeAll(actualCoffeeList);
-        actualCoffeeList.removeAll(expectedCoffeeList);
-
-        for (Coffee coffee : deletedCoffees) {
-            orderRepository.deleteReference(order.getId(), coffee.getId());
-        }
-        for (Coffee coffee : addedCoffees) {
-            orderRepository.addReference(order.getId(), coffee.getId());
-        }
-
-        return order;
+        order = this.orderRepository.save(order);
+        return mapper.entityToDto(order);
     }
 
     /**
      * Delete 'order' by specified id.
      *
      * @param id deleting order's id.
-     * @throws NullParamException          when coffeeDTO is null or it's fields is null.
-     * @throws NoValidIdException          form mapper, when coffeeDTO's id is less than zero.
-     * @throws OrderHasReferencesException when order with specific id has references with some coffee's.
-     * @throws OrderNotFoundException      when order with specific id is not found in db.
+     * @throws NullParamException     when coffeeDTO is null or it's fields is null.
+     * @throws NoValidIdException     form mapper, when coffeeDTO's id is less than zero.
+     * @throws OrderNotFoundException when order with specific id is not found in db.
      */
     @Override
     public void delete(Long id) {
@@ -127,13 +112,9 @@ public class OrderService implements IOrderService {
         if (id < 0)
             throw new NoValidIdException(id);
 
-        if (!coffeeRepository.findByOrderId(id).isEmpty())
-            throw new OrderHasReferencesException(id);
-
-        this.orderRepository.delete(id);
-
-        orderRepository.deletePairsByOrderId(id);
+        this.orderRepository.deleteById(id);
     }
+
 
     /**
      * Get 'order' queue. Oldest created, but not completed
@@ -142,16 +123,16 @@ public class OrderService implements IOrderService {
      * @return list of filtered and sorted orders.
      */
     @Override
-    public List<Order> getOrderQueue() {
+    @Transactional
+    public List<OrderPublicDTO> getOrderQueue() {
         List<Order> orderList = this.orderRepository.findAll();
         orderList = orderList.stream()
                 .filter(order -> order.getCompleted() == null)
                 .sorted(Comparator.comparing(Order::getCreated))
                 .toList();
-        for (Order order : orderList) {
-            order.setCoffeeList(coffeeRepository.findByOrderId(order.getId()));
-        }
-        return orderList;
+        return orderList.stream()
+                .map(mapper::entityToDto)
+                .toList();
     }
 
     /**
@@ -166,7 +147,8 @@ public class OrderService implements IOrderService {
      * @throws OrderAlreadyCompletedException when order already has completed time.
      */
     @Override
-    public Order completeOrder(Long id) {
+    @Transactional
+    public IOrderPublicDTO completeOrder(Long id) {
         if (id == null)
             throw new NullParamException();
         if (id < 0)
@@ -179,10 +161,9 @@ public class OrderService implements IOrderService {
             throw new OrderAlreadyCompletedException(order);
 
         order.setCompleted(LocalDateTime.now());
-        order = this.orderRepository.update(order);
+        order = this.orderRepository.save(order);
 
-        order.setCoffeeList(coffeeRepository.findByOrderId(order.getId()));
-        return order;
+        return mapper.entityToDto(order);
     }
 
     /**
@@ -191,12 +172,13 @@ public class OrderService implements IOrderService {
      * @return list of all 'order' objects
      */
     @Override
-    public List<Order> findAll() {
+    @Transactional
+    public List<OrderPublicDTO> findAll() {
         List<Order> orderList = this.orderRepository.findAll();
-        for (Order order : orderList) {
-            order.setCoffeeList(coffeeRepository.findByOrderId(order.getId()));
-        }
-        return orderList;
+
+        return orderList.stream()
+                .map(mapper::entityToDto)
+                .toList();
     }
 
     /**
@@ -209,7 +191,8 @@ public class OrderService implements IOrderService {
      * @throws OrderNotFoundException when order with specific id is not found in db.
      */
     @Override
-    public Order findById(Long id) {
+    @Transactional
+    public OrderPublicDTO findById(Long id) {
         if (id == null)
             throw new NullParamException();
         if (id < 0)
@@ -218,9 +201,7 @@ public class OrderService implements IOrderService {
         Order order = this.orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException(id));
 
-        order.setCoffeeList(coffeeRepository.findByOrderId(order.getId()));
-
-        return order;
+        return mapper.entityToDto(order);
     }
 
     /**
@@ -233,17 +214,20 @@ public class OrderService implements IOrderService {
      * @throws NoValidLimitException when limit is less than one.
      */
     @Override
-    public List<Order> findAllByPage(int page, int limit) {
+    @Transactional
+    public List<OrderPublicDTO> findAllByPage(int page, int limit) {
         if (page < 0)
             throw new NoValidPageException(page);
         if (limit <= 0)
             throw new NoValidLimitException(limit);
 
-        List<Order> orderList = this.orderRepository.findAllByPage(page, limit);
-        for (Order order : orderList) {
-            order.setCoffeeList(coffeeRepository.findByOrderId(order.getId()));
-        }
-        return orderList;
+        Pageable pageable = PageRequest.of(page, limit);
+
+        Page<Order> orderList = this.orderRepository.findAll(pageable);
+
+        return orderList.stream()
+                .map(mapper::entityToDto)
+                .toList();
     }
 
 }

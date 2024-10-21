@@ -1,8 +1,9 @@
 package com.example.rest.service;
 
-import com.example.rest.entity.Order;
 import com.example.rest.service.dto.IOrderCreateDTO;
+import com.example.rest.service.dto.IOrderPublicDTO;
 import com.example.rest.service.dto.IOrderUpdateDTO;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -17,7 +18,7 @@ public interface IOrderService {
      * @param orderDTO object with IOrderCreateDTO type.
      * @return Order object.
      */
-    Order create(IOrderCreateDTO orderDTO);
+    IOrderPublicDTO create(@Valid IOrderCreateDTO orderDTO);
 
     /**
      * Update 'order' in db by IOrderUpdateDTO.
@@ -25,7 +26,7 @@ public interface IOrderService {
      * @param orderDTO object with IOrderUpdateDTO type.
      * @return updated Order object.
      */
-    Order update(IOrderUpdateDTO orderDTO);
+    IOrderPublicDTO update(@Valid IOrderUpdateDTO orderDTO);
 
     /**
      * Delete 'order' by specified id.
@@ -40,7 +41,7 @@ public interface IOrderService {
      *
      * @return list of filtered and sorted orders.
      */
-    List<Order> getOrderQueue();
+    List<? extends IOrderPublicDTO> getOrderQueue();
 
     /**
      * Complete 'order' with specified 'id'.
@@ -49,14 +50,14 @@ public interface IOrderService {
      * @param id completing order's id.
      * @return completed order.
      */
-    Order completeOrder(Long id);
+    IOrderPublicDTO completeOrder(Long id);
 
     /**
      * Find all 'order' in db.
      *
      * @return list of all 'order' objects
      */
-    List<Order> findAll();
+    List<? extends IOrderPublicDTO> findAll();
 
     /**
      * Find 'order' by specified id.
@@ -64,7 +65,7 @@ public interface IOrderService {
      * @param id the desired order "id".
      * @return Order object with specified id.
      */
-    Order findById(Long id);
+    IOrderPublicDTO findById(Long id);
 
     /**
      * Find all 'order' grouping by pages and limited.
@@ -73,6 +74,6 @@ public interface IOrderService {
      * @param limit number maximum represented objects.
      * @return list of object from specified page. Maximum number object in list equals limit.
      */
-    List<Order> findAllByPage(int page, int limit);
+    List<? extends IOrderPublicDTO> findAllByPage(int page, int limit);
 
 }

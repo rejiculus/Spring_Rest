@@ -1,8 +1,9 @@
 package com.example.rest.service;
 
-import com.example.rest.entity.Barista;
 import com.example.rest.service.dto.IBaristaCreateDTO;
+import com.example.rest.service.dto.IBaristaPublicDTO;
 import com.example.rest.service.dto.IBaristaUpdateDTO;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -16,7 +17,7 @@ public interface IBaristaService {
      * @param baristaDTO object with IBaristaCreateDTO type.
      * @return Barista with specified id.
      */
-    Barista create(IBaristaCreateDTO baristaDTO);
+    IBaristaPublicDTO create(@Valid IBaristaCreateDTO baristaDTO);
 
     /**
      * Updating barista by IBaristaUpdateDTO.
@@ -26,7 +27,7 @@ public interface IBaristaService {
      * @param baristaDTO object with IBaristaUpdateDTO type.
      * @return Barista object.
      */
-    Barista update(IBaristaUpdateDTO baristaDTO);
+    IBaristaPublicDTO update(@Valid IBaristaUpdateDTO baristaDTO);
 
     /**
      * Delete barista from db.
@@ -42,14 +43,14 @@ public interface IBaristaService {
      * @param id barista's id.
      * @return Barista's object.
      */
-    Barista findById(Long id);
+    IBaristaPublicDTO findById(Long id);
 
     /**
      * Found all barista.
      *
      * @return list of barista's objects
      */
-    List<Barista> findAll();
+    List<? extends IBaristaPublicDTO> findAll();
 
     /**
      * Found all barista, grouped by page and limited.
@@ -58,5 +59,5 @@ public interface IBaristaService {
      * @param limit number of maximum objects in list.
      * @return list of barista's objects
      */
-    List<Barista> findAllByPage(int page, int limit);
+    List<? extends IBaristaPublicDTO> findAllByPage(int page, int limit);
 }

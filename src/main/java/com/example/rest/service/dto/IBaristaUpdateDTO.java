@@ -1,7 +1,5 @@
 package com.example.rest.service.dto;
 
-import java.util.List;
-
 public interface IBaristaUpdateDTO extends IUpdateDTO {
     Long id();
 
@@ -9,5 +7,4 @@ public interface IBaristaUpdateDTO extends IUpdateDTO {
 
     Double tipSize();
 
-    List<Long> orderIdList();
 }

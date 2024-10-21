@@ -1,7 +1,5 @@
 package com.example.rest.service.dto;
 
-import java.util.List;
-
 public interface ICoffeeNoRefDTO {
     Long id();
 
@@ -9,6 +7,5 @@ public interface ICoffeeNoRefDTO {
 
     Double price();
 
-    List<Long> orderIdList();
 
 }

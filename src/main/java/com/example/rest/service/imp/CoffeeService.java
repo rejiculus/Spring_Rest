@@ -1,48 +1,51 @@
 package com.example.rest.service.imp;
 
 import com.example.rest.entity.Coffee;
-import com.example.rest.entity.Order;
 import com.example.rest.entity.exception.*;
 import com.example.rest.repository.CoffeeRepository;
-import com.example.rest.repository.OrderRepository;
-import com.example.rest.repository.exception.KeyNotPresentException;
 import com.example.rest.repository.exception.NoValidLimitException;
 import com.example.rest.repository.exception.NoValidPageException;
 import com.example.rest.service.ICoffeeService;
 import com.example.rest.service.dto.ICoffeeCreateDTO;
+import com.example.rest.service.dto.ICoffeePublicDTO;
 import com.example.rest.service.dto.ICoffeeUpdateDTO;
-import com.example.rest.service.exception.CoffeeHasReferenceException;
-import com.example.rest.service.mapper.CoffeeDtoToCoffeeMapper;
+import com.example.rest.service.mapper.CoffeeMapper;
+import com.example.rest.servlet.dto.CoffeePublicDTO;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Service to processing coffee entity.
  */
+@Service
+@Validated
 public class CoffeeService implements ICoffeeService {
     private final CoffeeRepository coffeeRepository;
-    private final OrderRepository orderRepository;
+    private final CoffeeMapper mapper;
 
-    private final CoffeeDtoToCoffeeMapper mapper;
 
     /**
      * Constructor based on repositories.
      * Create mapper by orderRepository.
      *
-     * @param orderRepository  repository to interact with orders in db.
      * @param coffeeRepository repository to interact with coffee in db.
      * @throws NullParamException when orderRepository of coffeeRepository is null.
      */
-    public CoffeeService(OrderRepository orderRepository, CoffeeRepository coffeeRepository) {
-        if (orderRepository == null || coffeeRepository == null)
+    @Autowired
+    public CoffeeService(CoffeeRepository coffeeRepository, CoffeeMapper mapper) {
+        if (coffeeRepository == null || mapper == null)
             throw new NullParamException();
-
-        this.orderRepository = orderRepository;
         this.coffeeRepository = coffeeRepository;
-        this.mapper = new CoffeeDtoToCoffeeMapper(orderRepository);
+        this.mapper = mapper;
     }
-
 
     /**
      * Creating coffee by ICoffeeCreateDTO.
@@ -54,12 +57,14 @@ public class CoffeeService implements ICoffeeService {
      * @throws NoValidPriceException when coffeeDTO's price is NaN, Infinite or less than zero.
      */
     @Override
-    public Coffee create(ICoffeeCreateDTO coffeeDTO) {
+    @Transactional
+    public ICoffeePublicDTO create(@Valid ICoffeeCreateDTO coffeeDTO) {
         if (coffeeDTO == null)
             throw new NullParamException();
 
-        Coffee coffee = mapper.map(coffeeDTO);
-        return this.coffeeRepository.create(coffee);
+        Coffee coffee = mapper.createDtoToEntity(coffeeDTO);
+        coffee = this.coffeeRepository.save(coffee);
+        return mapper.entityToDto(coffee);
     }
 
     /**
@@ -74,42 +79,31 @@ public class CoffeeService implements ICoffeeService {
      * @throws NoValidNameException    form mapper, when coffeeDTO's name is empty.
      * @throws NoValidPriceException   from mapper, when coffeeDTO's price is NaN, Infinite or less than zero.
      * @throws CoffeeNotFoundException when coffee with this id is not found.
-     * @throws KeyNotPresentException  from addReference, when some orders in orderList is not found.
      * @throws OrderNotFoundException  when order for coffee's orderList is not found.
      */
     @Override
-    public Coffee update(ICoffeeUpdateDTO coffeeDTO) {
+    @Transactional
+    public ICoffeePublicDTO update(@Valid ICoffeeUpdateDTO coffeeDTO) {
         if (coffeeDTO == null)
             throw new NullParamException();
 
-        Coffee coffee = mapper.map(coffeeDTO);
-        coffee = this.coffeeRepository.update(coffee);
+        Coffee coffee = coffeeRepository.findById(coffeeDTO.id())
+                .orElseThrow(() -> new CoffeeNotFoundException(coffeeDTO.id()));
 
-        //update order - coffee references
-        List<Order> expectedOrderList = orderRepository.findByCoffeeId(coffee.getId());
-        List<Order> actualOrderList = coffee.getOrderList();
-        List<Order> deletedOrders = new ArrayList<>(expectedOrderList);
-        List<Order> addedOrders = new ArrayList<>(actualOrderList);
-        deletedOrders.removeAll(actualOrderList);
-        actualOrderList.removeAll(expectedOrderList);
+        coffee = mapper.updateDtoToEntity(coffeeDTO);
 
-        for (Order order : deletedOrders) {
-            coffeeRepository.deleteReference(order.getId(), coffee.getId());
-        }
-        for (Order order : addedOrders) {
-            coffeeRepository.addReference(order.getId(), coffee.getId());
-        }
-        return coffee;
+        coffee = this.coffeeRepository.save(coffee);
+
+        return mapper.entityToDto(coffee);
     }
 
     /**
      * Delete coffee with specified id.
      *
      * @param id deleting coffee id.
-     * @throws NullParamException          when id is null.
-     * @throws NoValidIdException          when id is less than zero.
-     * @throws CoffeeNotFoundException     when coffee with specific id is not found.
-     * @throws CoffeeHasReferenceException when coffee whit specific id has references with some orders.
+     * @throws NullParamException      when id is null.
+     * @throws NoValidIdException      when id is less than zero.
+     * @throws CoffeeNotFoundException when coffee with specific id is not found.
      */
     @Override
     public void delete(Long id) {
@@ -118,13 +112,7 @@ public class CoffeeService implements ICoffeeService {
         if (id < 0)
             throw new NoValidIdException(id);
 
-        if (!orderRepository.findByCoffeeId(id).isEmpty())
-            throw new CoffeeHasReferenceException(id);
-
-        this.coffeeRepository.delete(id);
-
-        coffeeRepository.deleteReferencesByCoffeeId(id);
-
+        this.coffeeRepository.deleteById(id);
     }
 
     /**
@@ -137,7 +125,8 @@ public class CoffeeService implements ICoffeeService {
      * @throws CoffeeNotFoundException when coffee with specified id is not found.
      */
     @Override
-    public Coffee findById(Long id) {
+    @Transactional
+    public ICoffeePublicDTO findById(Long id) {
         if (id == null)
             throw new NullParamException();
         if (id < 0)
@@ -146,10 +135,9 @@ public class CoffeeService implements ICoffeeService {
         Coffee coffee = this.coffeeRepository.findById(id)
                 .orElseThrow(() -> new CoffeeNotFoundException(id));
 
-        coffee.setOrderList(orderRepository.findByCoffeeId(coffee.getId()));
-
-        return coffee;
+        return mapper.entityToDto(coffee);
     }
+
 
     /**
      * Find all coffees.
@@ -157,13 +145,13 @@ public class CoffeeService implements ICoffeeService {
      * @return all coffee from db.
      */
     @Override
-    public List<Coffee> findAll() {
+    @Transactional
+    public List<CoffeePublicDTO> findAll() {
         List<Coffee> coffeeList = this.coffeeRepository.findAll();
 
-        for (Coffee coffee : coffeeList) {
-            coffee.setOrderList(orderRepository.findByCoffeeId(coffee.getId()));
-        }
-        return coffeeList;
+        return coffeeList.stream()
+                .map(mapper::entityToDto)
+                .toList();
     }
 
     /**
@@ -176,17 +164,19 @@ public class CoffeeService implements ICoffeeService {
      * @throws NoValidLimitException when limit is less than one.
      */
     @Override
-    public List<Coffee> findAllByPage(int page, int limit) {
+    @Transactional
+    public List<CoffeePublicDTO> findAllByPage(int page, int limit) {
         if (page < 0)
             throw new NoValidPageException(page);
         if (limit <= 0)
             throw new NoValidLimitException(limit);
 
-        List<Coffee> coffeeList = this.coffeeRepository.findAllByPage(page, limit);
+        Pageable pageable = PageRequest.of(page, limit);
 
-        for (Coffee coffee : coffeeList) {
-            coffee.setOrderList(orderRepository.findByCoffeeId(coffee.getId()));
-        }
-        return coffeeList;
+        Page<Coffee> coffeeList = this.coffeeRepository.findAll(pageable);
+
+        return coffeeList.stream()
+                .map(mapper::entityToDto)
+                .toList();
     }
 }

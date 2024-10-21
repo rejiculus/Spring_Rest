@@ -1,8 +1,9 @@
 package com.example.rest.service;
 
-import com.example.rest.entity.Coffee;
 import com.example.rest.service.dto.ICoffeeCreateDTO;
+import com.example.rest.service.dto.ICoffeePublicDTO;
 import com.example.rest.service.dto.ICoffeeUpdateDTO;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -17,7 +18,7 @@ public interface ICoffeeService {
      * @param coffeeDTO object with ICoffeeCreateDTO type.
      * @return Coffee object.
      */
-    Coffee create(ICoffeeCreateDTO coffeeDTO);
+    ICoffeePublicDTO create(@Valid ICoffeeCreateDTO coffeeDTO);
 
     /**
      * Updating coffee by ICoffeeUpdateDTO.
@@ -27,7 +28,7 @@ public interface ICoffeeService {
      * @param coffeeDTO object with ICoffeeUpdateDTO type.
      * @return Coffee object.
      */
-    Coffee update(ICoffeeUpdateDTO coffeeDTO);
+    ICoffeePublicDTO update(@Valid ICoffeeUpdateDTO coffeeDTO);
 
     /**
      * Delete coffee with specified id.
@@ -42,14 +43,14 @@ public interface ICoffeeService {
      * @param id finding coffee's id.
      * @return Coffee order with specified id.
      */
-    Coffee findById(Long id);
+    ICoffeePublicDTO findById(Long id);
 
     /**
      * Find all coffees.
      *
      * @return all coffee from db.
      */
-    List<Coffee> findAll();
+    List<? extends ICoffeePublicDTO> findAll();
 
     /**
      * Find all coffee grouping by pages and limited.
@@ -58,5 +59,5 @@ public interface ICoffeeService {
      * @param limit number maximum represented objects.
      * @return list of object from specified page. Maximum number object in list equals limit.
      */
-    List<Coffee> findAllByPage(int page, int limit);
+    List<? extends ICoffeePublicDTO> findAllByPage(int page, int limit);
 }

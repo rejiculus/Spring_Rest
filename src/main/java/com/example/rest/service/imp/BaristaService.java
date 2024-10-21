@@ -1,44 +1,50 @@
 package com.example.rest.service.imp;
 
 import com.example.rest.entity.Barista;
-import com.example.rest.entity.Order;
 import com.example.rest.entity.exception.*;
 import com.example.rest.repository.BaristaRepository;
-import com.example.rest.repository.OrderRepository;
 import com.example.rest.repository.exception.NoValidLimitException;
 import com.example.rest.repository.exception.NoValidPageException;
 import com.example.rest.service.IBaristaService;
 import com.example.rest.service.dto.IBaristaCreateDTO;
+import com.example.rest.service.dto.IBaristaPublicDTO;
 import com.example.rest.service.dto.IBaristaUpdateDTO;
-import com.example.rest.service.mapper.BaristaDtoToBaristaMapper;
+import com.example.rest.service.mapper.BaristaMapper;
+import com.example.rest.servlet.dto.BaristaPublicDTO;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Service for processing barista entity.
  */
+@Service
+@Validated
 public class BaristaService implements IBaristaService {
     private final BaristaRepository baristaRepository;
-    private final OrderRepository orderRepository;
-    private final BaristaDtoToBaristaMapper mapper;
+    private final BaristaMapper mapper;
 
     /**
      * Constructor based on repositories. Create mapper by order repository.
      *
      * @param baristaRepository repository to interact with barista schema in db.
-     * @param orderRepository   repository to interact with order schema in db.
      * @throws NullParamException when some of params is null.
      */
-    public BaristaService(BaristaRepository baristaRepository, OrderRepository orderRepository) {
-        if (baristaRepository == null || orderRepository == null)
+    @Autowired
+    public BaristaService(BaristaRepository baristaRepository, BaristaMapper mapper) {
+        if (baristaRepository == null || mapper == null)
             throw new NullParamException();
 
         this.baristaRepository = baristaRepository;
-        this.orderRepository = orderRepository;
-        this.mapper = new BaristaDtoToBaristaMapper(orderRepository);
+        this.mapper = mapper;
     }
-
 
     /**
      * Creating barista by IBaristaCreateDTO.
@@ -50,12 +56,15 @@ public class BaristaService implements IBaristaService {
      * @throws NoValidTipSizeException from mapper, when baristaDTO's tipSize is NaN, Infinite or less than zero.
      */
     @Override
-    public Barista create(IBaristaCreateDTO baristaDTO) {
+    @Transactional
+    public IBaristaPublicDTO create(@Valid IBaristaCreateDTO baristaDTO) {
         if (baristaDTO == null)
             throw new NullParamException();
 
-        Barista barista = mapper.map(baristaDTO);
-        return this.baristaRepository.create(barista);
+        Barista barista = mapper.createDtoToEntity(baristaDTO);
+        barista = this.baristaRepository.save(barista);
+
+        return mapper.entityToDto(barista);
     }
 
     /**
@@ -72,30 +81,16 @@ public class BaristaService implements IBaristaService {
      * @throws BaristaNotFoundException from baristaRepository, when id is not found in db.
      * @throws OrderNotFoundException   from orderRepository, when order form baristaDTO's orderIdList is not found in db.
      */
-    @Override
-    public Barista update(IBaristaUpdateDTO baristaDTO) {
+    @Transactional
+    public IBaristaPublicDTO update(@Valid IBaristaUpdateDTO baristaDTO) {
         if (baristaDTO == null)
             throw new NullParamException();
 
-        Barista barista = mapper.map(baristaDTO);
+        Barista barista = mapper.updateDtoToEntity(baristaDTO);
 
-        barista = this.baristaRepository.update(barista);
+        barista = this.baristaRepository.save(barista);
 
-        List<Order> expectedOrderList = orderRepository.findByBaristaId(barista.getId());
-        List<Order> actualOrderList = barista.getOrderList();
-        List<Order> deletedOrders = new ArrayList<>(expectedOrderList);
-        List<Order> addedOrders = new ArrayList<>(actualOrderList);
-        deletedOrders.removeAll(actualOrderList);
-        actualOrderList.removeAll(expectedOrderList);
-
-        for (Order order : deletedOrders) {
-            orderRepository.setBaristaDefault(order.getId());
-        }
-        for (Order order : addedOrders) {
-            order.setBarista(barista);
-            orderRepository.update(order);
-        }
-        return barista;
+        return mapper.entityToDto(barista);
     }
 
     /**
@@ -114,12 +109,7 @@ public class BaristaService implements IBaristaService {
         if (id < 0)
             throw new NoValidIdException(id);
 
-        List<Order> orderList = orderRepository.findByBaristaId(id);
-        for (Order order : orderList) {
-            orderRepository.setBaristaDefault(order.getId());
-        }
-
-        this.baristaRepository.delete(id);
+        this.baristaRepository.deleteById(id);
     }
 
     /**
@@ -132,7 +122,8 @@ public class BaristaService implements IBaristaService {
      * @throws BaristaNotFoundException when barista with this id is not found in db.
      */
     @Override
-    public Barista findById(Long id) {
+    @Transactional
+    public IBaristaPublicDTO findById(Long id) {
         if (id == null)
             throw new NullParamException();
         if (id < 0)
@@ -141,9 +132,8 @@ public class BaristaService implements IBaristaService {
         Barista barista = this.baristaRepository.findById(id)
                 .orElseThrow(() -> new BaristaNotFoundException(id));
 
-        barista.setOrderList(orderRepository.findByBaristaId(barista.getId()));
 
-        return barista;
+        return mapper.entityToDto(barista);
     }
 
     /**
@@ -152,12 +142,12 @@ public class BaristaService implements IBaristaService {
      * @return list of barista's objects
      */
     @Override
-    public List<Barista> findAll() {
+    @Transactional
+    public List<BaristaPublicDTO> findAll() {
         List<Barista> baristaList = this.baristaRepository.findAll();
-        for (Barista barista : baristaList) {
-            barista.setOrderList(orderRepository.findByBaristaId(barista.getId()));
-        }
-        return baristaList;
+        return baristaList.stream()
+                .map(mapper::entityToDto)
+                .toList();
     }
 
     /**
@@ -170,17 +160,19 @@ public class BaristaService implements IBaristaService {
      * @throws NoValidLimitException when limit is less than one.
      */
     @Override
-    public List<Barista> findAllByPage(int page, int limit) {
+    @Transactional
+    public List<BaristaPublicDTO> findAllByPage(int page, int limit) {
         if (page < 0)
             throw new NoValidPageException(page);
         if (limit <= 0)
             throw new NoValidLimitException(limit);
 
-        List<Barista> baristaList = this.baristaRepository.findAllByPage(page, limit);
-        for (Barista barista : baristaList) {
-            barista.setOrderList(orderRepository.findByBaristaId(barista.getId()));
-        }
-        return baristaList;
+        Pageable pageable = PageRequest.of(page, limit);
+
+        Page<Barista> baristaList = this.baristaRepository.findAll(pageable);
+        return baristaList.stream()
+                .map(mapper::entityToDto)
+                .toList();
     }
 
 }
