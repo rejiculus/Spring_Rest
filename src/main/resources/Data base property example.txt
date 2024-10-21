@@ -1,0 +1,13 @@
+databasePlatform=org.hibernate.dialect.PostgreSQLDialect
+show-sql=true
+ddl-auto=update
+dataSourceClassName=org.postgresql.ds.PGSimpleDataSource
+url=jdbc:postgresql://localhost:5432/
+user=username
+password=password
+poolName=SpringBootHikariCP
+maximumPoolSize=5
+minimumIdle=3
+maxLifetime=2000000
+connectionTimeout=30000
+idleTimeout=30000
